@@ -38,6 +38,8 @@
 #include <GxEPD2_BW.h> // including both doesn't hurt
 #include <GxEPD2_3C.h> // including both doesn't hurt
 #include <Fonts/FreeSans9pt7b.h>
+#include <Fonts/FreeSans18pt7b.h>
+#include <Fonts/FreeSans24pt7b.h>
 
 #define MAX_DISPLAY_BUFFER_SIZE 800
 #define MAX_HEIGHT(EPD) (EPD::HEIGHT <= MAX_DISPLAY_BUFFER_SIZE / (EPD::WIDTH / 8) ? EPD::HEIGHT : MAX_DISPLAY_BUFFER_SIZE / (EPD::WIDTH / 8))
@@ -110,11 +112,14 @@ enum states {
 	SMODEDEVICELOGINFAILED,
 	SMODEAUTHREADY,
 	SMODEREFRESHTOKEN,
+	SMODEPOLLPRESENCE,
 	SMODEERROR
 };
 uint8_t currentState = SMODEINITIAL;
 uint8_t lastState = SMODEINITIAL;
 static unsigned long tsPolling = 0;
+
+GraphPresence currentGraphPresence = {strdup(""), strdup(""), strdup("")};
 
 
 
@@ -251,8 +256,45 @@ void statemachine() {
 
 	// Statemachine: After wifi is connected
 	if (currentState == SMODEAUTHREADY && lastState != SMODEAUTHREADY) {
-		sprintf(statusMessage, "=== Auth ready ===\n%s",  access_token.c_str());
-		displayMessage(statusMessage);
+		// sprintf(statusMessage, "=== Auth ready ===\n%s",  access_token.c_str());
+		// displayMessage(statusMessage);
+		currentState = SMODEPOLLPRESENCE;
+	}
+
+	// Statemachine: Poll for presence information, even if there was a error before (handled below)
+	if (currentState == SMODEPOLLPRESENCE) {
+		if (millis() >= tsPolling) {
+			DBG_PRINTLN(F("Polling presence info ..."));
+
+			const char *lastActivity = currentGraphPresence.activity;
+
+			currentGraphPresence = graphClient.getUserPresence();
+			GraphError gpe = graphClient.getLastError();
+			if (!gpe.hasError) {
+				DBG_PRINT("PRESENCE: ");
+				DBG_PRINT(currentGraphPresence.activity);
+				DBG_PRINT(" - ");
+				DBG_PRINTLN(currentGraphPresence.activity);
+
+				if (strcmp(lastActivity, currentGraphPresence.activity) != 0) {
+					sprintf(statusMessage, "%s", currentGraphPresence.activity);
+					displayMessage(statusMessage, 24);
+				}
+			} else {
+				DBG_PRINT("GPE error: ");
+				DBG_PRINTLN(gpe.message);
+				if (gpe.tokenNeedsRefresh) {
+					currentState = SMODEREFRESHTOKEN;
+				}
+			}
+
+			tsPolling = millis() + (atoi(paramPollIntervalValue) * 1000);
+		}
+
+		// if (getTokenLifetime() < TOKEN_REFRESH_TIMEOUT) {
+		// 	Serial.printf("Token needs refresh, valid for %d s.\n", getTokenLifetime());
+		// 	currentState = SMODEREFRESHTOKEN;
+		// }
 	}
 
 	// Update laststate

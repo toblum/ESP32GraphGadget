@@ -1,5 +1,4 @@
-void displayInit()
-{
+void displayInit() {
     static bool isInit = false;
     if (isInit) {
         return;
@@ -13,9 +12,14 @@ void displayInit()
     display.firstPage();
 }
 
-void displayMessage(const char *message)
-{
-    // const char HelloWorld[] = "Hello World!";
+void displayMessage(const char *message, int fontSize = 9) {
+    if (fontSize == 24) {
+        display.setFont(&FreeSans24pt7b);
+    } else if (fontSize == 18) {
+        display.setFont(&FreeSans18pt7b);
+    } else {
+        display.setFont(&FreeSans9pt7b);
+    }
 
     int16_t tbx, tby; uint16_t tbw, tbh;
     display.getTextBounds(message, 0, 0, &tbx, &tby, &tbw, &tbh);

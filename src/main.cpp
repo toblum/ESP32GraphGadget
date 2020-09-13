@@ -88,12 +88,10 @@ String access_token = "";
 String refresh_token = "";
 String id_token = "";
 unsigned int expires = 0;
-
-WiFiClientSecure client;
-ArduinoMSGraph graphClient(client, paramTenantValue, paramClientIdValue);
-
-DynamicJsonDocument authDoc(10000);
 const char *deviceCode = "";
+
+ArduinoMSGraph graphClient(paramTenantValue, paramClientIdValue);
+
 
 
 
@@ -188,11 +186,13 @@ void statemachine() {
 			currentState = SMODEREFRESHTOKEN;
 		} else {
 			if (strlen(paramClientIdValue) > 0 && strlen(paramTenantValue) > 0) {
+
+				DynamicJsonDocument authDoc(10000);
 				// Start device login flow
 				graphClient.startDeviceLoginFlow(authDoc, "offline_access%20openid%20Presence.Read%20Calendars.Read");
 
 				// Consume result
-				deviceCode = authDoc["device_code"].as<const char*>();
+				deviceCode = strdup(authDoc["device_code"].as<const char*>());
 				const char *user_code = authDoc["user_code"].as<const char*>();
 				const char *verification_uri = authDoc["verification_uri"].as<const char*>();
 				const char *message = authDoc["message"].as<const char*>();
@@ -234,6 +234,7 @@ void statemachine() {
 		if (millis() >= tsPolling) {
 			DBG_PRINT("deviceCode: ");
 			DBG_PRINTLN(deviceCode);
+			DynamicJsonDocument authDoc(10000);
 			bool res = graphClient.pollForToken(authDoc, deviceCode);
 
 			if (res) {

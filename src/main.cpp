@@ -47,7 +47,6 @@ GxEPD2_BW<GxEPD2_213_B72, GxEPD2_213_B72::HEIGHT> display(GxEPD2_213_B72(/*CS=D8
 char *statusMessage = strdup("Startup ...");
 
 
-
 /**
  * iotWebConf
  */
@@ -82,7 +81,6 @@ IotWebConfParameter paramTenant = IotWebConfParameter("Tenant hostname / ID", "t
 IotWebConfParameter paramPollInterval = IotWebConfParameter("Presence polling interval (sec) (default: 30)", "pollInterval", paramPollIntervalValue, INTEGER_LEN, "number", "10..300", "30", "min='10' max='300' step='5'");
 
 
-
 /**
  * ArduinoMSGraph
  */
@@ -93,9 +91,6 @@ unsigned int expires = 0;
 const char *deviceCode = "";
 
 ArduinoMSGraph graphClient(paramTenantValue, paramClientIdValue);
-
-
-
 
 /**
  * General
@@ -118,14 +113,10 @@ enum states {
 uint8_t currentState = SMODEINITIAL;
 uint8_t lastState = SMODEINITIAL;
 static unsigned long tsPolling = 0;
-
-GraphPresence currentGraphPresence = {strdup(""), strdup(""), strdup("")};
-
+const char *lastActivity = "";
 
 
 #include "epaper_display.h"
-// #include "helper.h"
-
 
 
 /**
@@ -146,8 +137,6 @@ void handleRoot()
 
 	server.send(200, "text/html", s);
 }
-
-
 
 void wifiConnected()
 {
@@ -205,7 +194,6 @@ void statemachine() {
 				sprintf(statusMessage, "=== Device login flow ===\nTo authenticate go to:\n%s, enter code:\n%s and login.", verification_uri, user_code);
 				displayMessage(statusMessage);
 				DBG_PRINTLN(message);
-				DBG_PRINTLN(deviceCode);
 
 				currentState = SMODEDEVICELOGINSTARTED;
 			} else {
@@ -237,8 +225,6 @@ void statemachine() {
 	// Statemachine: Device login flow running
 	if (currentState == SMODEDEVICELOGINSTARTED) {
 		if (millis() >= tsPolling) {
-			DBG_PRINT("deviceCode: ");
-			DBG_PRINTLN(deviceCode);
 			DynamicJsonDocument authDoc(10000);
 			bool res = graphClient.pollForToken(authDoc, deviceCode);
 
@@ -256,8 +242,6 @@ void statemachine() {
 
 	// Statemachine: After wifi is connected
 	if (currentState == SMODEAUTHREADY && lastState != SMODEAUTHREADY) {
-		// sprintf(statusMessage, "=== Auth ready ===\n%s",  access_token.c_str());
-		// displayMessage(statusMessage);
 		currentState = SMODEPOLLPRESENCE;
 	}
 
@@ -266,17 +250,18 @@ void statemachine() {
 		if (millis() >= tsPolling) {
 			DBG_PRINTLN(F("Polling presence info ..."));
 
-			const char *lastActivity = currentGraphPresence.activity;
-
-			currentGraphPresence = graphClient.getUserPresence();
+			GraphPresence currentGraphPresence = graphClient.getUserPresence();
 			GraphError gpe = graphClient.getLastError();
 			if (!gpe.hasError) {
 				DBG_PRINT("PRESENCE: ");
 				DBG_PRINT(currentGraphPresence.activity);
-				DBG_PRINT(" - ");
-				DBG_PRINTLN(currentGraphPresence.activity);
+				DBG_PRINT(" - (");
+				DBG_PRINT(currentGraphPresence.availability);
+				DBG_PRINT(") - Last: ");
+				DBG_PRINTLN(lastActivity);
 
 				if (strcmp(lastActivity, currentGraphPresence.activity) != 0) {
+					lastActivity = strdup(currentGraphPresence.activity);
 					sprintf(statusMessage, "%s", currentGraphPresence.activity);
 					displayMessage(statusMessage, 24);
 				}
@@ -290,11 +275,6 @@ void statemachine() {
 
 			tsPolling = millis() + (atoi(paramPollIntervalValue) * 1000);
 		}
-
-		// if (getTokenLifetime() < TOKEN_REFRESH_TIMEOUT) {
-		// 	Serial.printf("Token needs refresh, valid for %d s.\n", getTokenLifetime());
-		// 	currentState = SMODEREFRESHTOKEN;
-		// }
 	}
 
 	// Update laststate
@@ -346,7 +326,6 @@ void setup()
 
 void loop()
 {
-	// -- doLoop should be called as frequently as possible.
 	iotWebConf.doLoop();
 
 	statemachine();
